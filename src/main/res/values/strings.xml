@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Integrator</string>
+    <string name="action_settings">Close Session</string>
+    <string name="action_load_more">Load More</string>
+    <string name="action_transactions">Transactions</string>
+    <string name="action_refund">Refund</string>
+    <string name="hello_world">Hello world!</string>
+
+</resources>
