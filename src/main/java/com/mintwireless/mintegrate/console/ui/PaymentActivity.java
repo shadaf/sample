@@ -14,6 +14,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import com.mintwireless.mintegrate.console.CaptureSignature;
 import com.mintwireless.mintegrate.console.R;
 import com.mintwireless.mintegrate.console.utils.Logger;
 import com.mintwireless.mintegrate.core.Session;
@@ -23,8 +24,10 @@ import com.mintwireless.mintegrate.core.models.ApplicationSelectionItem;
 import com.mintwireless.mintegrate.core.requests.CardDetectionModeController;
 import com.mintwireless.mintegrate.core.requests.RequestBase;
 import com.mintwireless.mintegrate.core.requests.SubmitPaymentRequest;
+import com.mintwireless.mintegrate.core.requests.SubmitRefundRequest;
 import com.mintwireless.mintegrate.core.requests.VerifySignatureRequest;
 import com.mintwireless.mintegrate.core.responses.BaseResponse;
+import com.mintwireless.mintegrate.core.responses.GetTransactionDetailsResponse;
 import com.mintwireless.mintegrate.core.responses.SubmitPaymentResponse;
 import com.mintwireless.mintegrate.sdk.Mintegrate;
 
@@ -35,9 +38,9 @@ import java.util.ArrayList;
  */
 public class PaymentActivity extends AppCompatActivity implements SubmitPaymentRequest.onEventListenerChipnPin, ProcessDialogFragment.OnCancelCallback {
 
-    private EditText editTextAmount;
-    private EditText editTextNote;
-    private Button btnSubmitPayment;
+    private EditText editTextAmount, editTextAmountR;
+    private EditText editTextNote, editTextNoteR;
+    private Button btnSubmitPayment, btnSubmitPaymentR;
     private String authToken;
     private Session session;
     private ProcessDialogFragment processDialogFragment;
@@ -57,13 +60,21 @@ public class PaymentActivity extends AppCompatActivity implements SubmitPaymentR
         editTextAmount = (EditText) findViewById(R.id.amount);
         editTextNote = (EditText) findViewById(R.id.note);
         btnSubmitPayment = (Button) findViewById(R.id.submit_payment);
+        editTextAmountR = (EditText) findViewById(R.id.amountR);
+        editTextNoteR = (EditText) findViewById(R.id.noteR);
+        btnSubmitPaymentR = (Button) findViewById(R.id.submit_paymentR);
         btnSubmitPayment.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 submitPayment();
             }
         });
-
+        btnSubmitPaymentR.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                callrefund();
+            }
+        });
     }
 
     @Override
@@ -348,6 +359,8 @@ public class PaymentActivity extends AppCompatActivity implements SubmitPaymentR
         switch (status) {
             case APPROVED:
                 message = "Transaction Approved";
+                editTextAmountR.setText(submitPaymentResponse.getTransactionAmount());
+                editTextNoteR.setText(submitPaymentResponse.getTransactionRequestID());
                 break;
             case DECLINED:
                 message = "Transaction Declined";
@@ -371,5 +384,220 @@ public class PaymentActivity extends AppCompatActivity implements SubmitPaymentR
         Logger.logInfo(PaymentActivity.class, "Close Session");
         if (session != null)
             session.close();
+    }
+
+    //Refund scenario
+    private void callrefund(){
+        SubmitRefundRequest refundRequest = new SubmitRefundRequest();
+        refundRequest.setAmount(editTextAmountR.getText().toString());
+        refundRequest.setRefundableAmount(editTextAmountR.getText().toString());
+        refundRequest.setNotes("first refund");
+        refundRequest.setRefundSourceTransactionRequestId(editTextNoteR.getText().toString());
+        refundRequest.setAuthToken(authToken);
+
+
+        //Callback
+        SubmitRefundRequest.onRefundEventListenerWithMerchantSignature callback = new SubmitRefundRequest.onRefundEventListenerWithMerchantSignature() {
+
+
+            @Override
+            public void onError(Session session, MintegrateError.Error error) {
+                switch (error.getCode()) {
+                    case MintegrateError.ERROR_COMMON_CARD_READER_NOT_CONNECTED:
+                        processDialogFragment.setProcessMessage("Waiting for reader...");
+                        break;
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_PIN_MISMATCH:
+                        break;
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_CARD_READ_ERROR: {
+                        String message = "Please Insert or Swipe Card";
+                        if (mIsFallBack) {
+                            message = "Please Swipe Card";
+                        } else if (mIsFallForward) {
+                            message = "Please Insert Card";
+                        }
+                        processDialogFragment.setProcessMessage(message);
+                        break;
+                    }
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_FALLBACK: {
+                        mIsFallBack = true;
+                        processDialogFragment.setProcessMessage("Please Swipe Card");
+                        break;
+                    }
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_FALLFORWARD: {
+                        mIsFallForward = true;
+                        processDialogFragment.setProcessMessage("Please Insert Card");
+                        break;
+                    }
+
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_CONTACTLESS_TRANSACTION_DECLINED_FALLBACK_TO_CHIP: {
+                        processDialogFragment.dismiss();
+                        closeSession();
+                        Toast.makeText(PaymentActivity.this, error.getMessage(), Toast.LENGTH_LONG).show();
+                        break;
+                    }
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_CONTACTLESS_FALLBACK_TO_CHIP: {
+                        processDialogFragment.setProcessMessage("Please Insert Card");
+                        Toast.makeText(PaymentActivity.this, error.getMessage(), Toast.LENGTH_LONG).show();
+                        break;
+                    }
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_CONTACTLESS_NOT_SUPPORTED: {
+                        processDialogFragment.setProcessMessage("Please Insert or Swipe Card");
+                        Toast.makeText(PaymentActivity.this, error.getMessage(), Toast.LENGTH_LONG).show();
+                        break;
+                    }
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_CONTACTLESS_FALLBACK_TO_CHIP_OR_SWIPE: {
+                        processDialogFragment.setProcessMessage("Please Insert or Swipe Card");
+                        break;
+                    }
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_WAIT_FOR_ACCOUNT_SELECTION_TIME_OUT:
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_USER_CANCELLED:
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_WAIT_FOR_PIN_TIME_OUT:
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_CARD_REMOVED:
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_TRANSACTION_CANCEL_FAILED:
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_TRANSACTION_UNKNOWN_STATUS: {
+                        Toast.makeText(PaymentActivity.this, error.getMessage(), Toast.LENGTH_LONG).show();
+                        processDialogFragment.dismiss();
+                        closeSession();
+                        break;
+                    }
+                    case MintegrateError.ERROR_SUBMIT_REFUND_WAITING_FOR_MERCHANT_SIGNATURE_TIMEOUT: {
+                        Toast.makeText(PaymentActivity.this, "Transaction Cancelled.Timeout waiting for merchant signature.", Toast.LENGTH_LONG).show();
+                        processDialogFragment.dismiss();
+                        closeSession();
+                        break;
+                    }
+                    case MintegrateError.ERROR_SUBMIT_PAYMENT_REFUND_WAITING_FOR_CARD_TIMEOUT: {
+                        Toast.makeText(PaymentActivity.this, "Time out waiting for card", Toast.LENGTH_LONG).show();
+                        processDialogFragment.dismiss();
+                        closeSession();
+                        break;
+                    }
+                    case MintegrateError.ERROR_SEND_RECEIPT:
+                    case MintegrateError.ERROR_SEND_RECEIPT_PRINTER_NOT_CONNECTED:
+                    case MintegrateError.ERROR_GET_USER_RECEIPT:
+                    default:
+                        Toast.makeText(PaymentActivity.this, error.getMessage(), Toast.LENGTH_LONG).show();
+                        processDialogFragment.dismiss();
+                        closeSession();
+                }
+            }
+
+            @Override
+            public void onCompletion(Session session, BaseResponse baseResponse) {
+                SubmitPaymentResponse submitPaymentResponse = (SubmitPaymentResponse) baseResponse;
+                SubmitPaymentResponse.Status status = submitPaymentResponse.getTransactionStatus();
+                processDialogFragment.dismiss();
+                closeSession();
+                String message = null;
+                switch (status) {
+                    case APPROVED:
+                        message = "Transaction Approved";
+                        break;
+                    case DECLINED:
+                        message = "Transaction Declined";
+                        break;
+                    case CANCELLED:
+                        message = "Transaction Cancelled";
+                }
+
+                Toast toast = Toast.makeText(PaymentActivity.this, message, Toast.LENGTH_LONG);
+                toast.setGravity(Gravity.CENTER, 0, 0);
+                toast.show();
+            }
+
+            @Override
+            public void onPrepareToWaitForCard(Session session, CardDetectionModeController cardDetectionModeController) {
+
+            }
+
+            @Override
+            public void onCardApplicationSelection(Session session, ArrayList<ApplicationSelectionItem> arrayList) {
+            }
+
+            @Override
+            public void onWaitForSignature(Session session, SubmitPaymentResponse submitPaymentResponse) {
+                processDialogFragment.setProcessMessage("Waiting for sign...");
+            }
+
+            @Override
+            public void onWaitForSignatureVerification(Session session) {
+                processDialogFragment.setProcessMessage("Waiting for sign verification...");
+                VerifySignatureRequest signatureVerificationReq = new VerifySignatureRequest();
+                signatureVerificationReq.setPin("123456");
+                signatureVerificationReq.setLastAttempt(false);
+                signatureVerificationReq.setCancelling(false);
+                session.nextWithParamater(signatureVerificationReq);
+            }
+
+            @Override
+            public void onWaitForSendReceipt(Session session, SubmitPaymentResponse submitPaymentResponse) {
+                processDialogFragment.setProcessMessage("Please send receipt");
+                session.next();
+            }
+
+            @Override
+            public void onWaitForRemoveCard(Session session, SubmitPaymentResponse submitPaymentResponse) {
+                processDialogFragment.setProcessMessage("Please remove card");
+            }
+
+            @Override
+            public void onWaitForReaderConnection(Session session) {
+                processDialogFragment.setProcessMessage("Waiting for reader...");
+            }
+
+            @Override
+            public void onReaderConnected(Session session) {
+                processDialogFragment.setProcessMessage("reader connected...");
+            }
+
+            @Override
+            public void onUpdatingReader(String s, float v) {
+                processDialogFragment.setProcessMessage(s);
+            }
+
+            @Override
+            public void onReaderStatusMessageReceived(String s) {
+                processDialogFragment.setProcessMessage(""+s);
+            }
+
+            @Override
+            public void onRefundProgress(Session session) {
+                processDialogFragment.setProcessMessage("Refund is in progress...");
+            }
+
+            @Override
+            public void onWaitForMerchantSignature(Session session, GetTransactionDetailsResponse getTransactionDetailsResponse) {
+                processDialogFragment.setProcessMessage("Waiting for signature...");
+                Intent intent1 = new Intent(PaymentActivity.this, CaptureSignature.class);
+                intent1.putExtra("Ref", "");
+                intent1.putExtra("Date", "");
+                intent1.putExtra("Amount",  "");
+                startActivityForResult(intent1, 1);
+            }
+        };
+        try {
+            session = Mintegrate.submitRefund(refundRequest, callback, this);
+        } catch (MintegrateException e) {
+            e.printStackTrace();
+        }
+        processDialogFragment = ProcessDialogFragment.newInstance("initialising transaction");
+        processDialogFragment.setCancelCallback(this);
+        processDialogFragment.setCancelable(false);
+
+        FragmentTransaction fragmentTransaction = getSupportFragmentManager().beginTransaction();
+        fragmentTransaction.add(processDialogFragment, "loadingFragment").commit();
+        session.next();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if(requestCode == 1){
+            if(data != null){
+                session.nextWithParamater(data.getStringExtra("base"));
+            }
+        }
+
     }
 }
