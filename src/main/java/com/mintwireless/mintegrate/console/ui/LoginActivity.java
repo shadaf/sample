@@ -32,8 +32,8 @@ public class LoginActivity extends AppCompatActivity implements SubmitLoginReque
     private EditText mEtxtPassword;
     private Session session;
 
-    private String apiKey = "tlyqiQSyX2RLv8ZR6DWh";//"zJlMblxFP21rBtj6eS55";//"o2unjasnfkskdfjsdf";
-    private String secrekey = "JBZy7Kgx2ln1RdqsjHnJ";//"reycHj0sCSJp15aJ2DnE";//"23oi4usdjfsdfsf";
+    private String apiKey = "zJlMblxFP21rBtj6eS55";//"tlyqiQSyX2RLv8ZR6DWh";//"zJlMblxFP21rBtj6eS55";//"o2unjasnfkskdfjsdf";
+    private String secrekey = "reycHj0sCSJp15aJ2DnE";//"JBZy7Kgx2ln1RdqsjHnJ";//"reycHj0sCSJp15aJ2DnE";//"23oi4usdjfsdfsf";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
